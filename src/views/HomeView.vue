@@ -127,7 +127,7 @@ const createPlanet = async () => {
     let coverUrl = '';
     if (planetForm.file) {
       const uploadRes = await uploadImage(planetForm.file);
-      if (uploadRes.code === 0 && uploadRes.data && uploadRes.data.url) {
+      if (uploadRes.code === 200 && uploadRes.data && uploadRes.data.url) {
         coverUrl = uploadRes.data.url;
       } else {
         ElMessage.error('封面图上传失败');
@@ -145,7 +145,7 @@ const createPlanet = async () => {
     };
     
     const res = await apiCreatePlanet(createData);
-    if (res.code === 0 && res.data) {
+    if (res.code === 200 && res.data) {
       ElMessage.success('星球创建成功');
       showCreatePlanetDialog.value = false;
       // 刷新星球列表

@@ -14,7 +14,7 @@ export const usePlanetStore = defineStore('planet', {
       this.loading = true;
       try {
         const res = await getPlanetList();
-        if (res.code === 0 && res.data) {
+        if (res.code === 200 && res.data) {
           this.planets = res.data;
         }
       } catch (error) {
@@ -28,7 +28,7 @@ export const usePlanetStore = defineStore('planet', {
       this.loading = true;
       try {
         const res = await getPlanetDetail(planetId);
-        if (res.code === 0 && res.data) {
+        if (res.code === 200 && res.data) {
           this.currentPlanet = res.data;
           return res.data;
         }

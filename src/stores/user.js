@@ -7,7 +7,7 @@ export const useUserStore = defineStore('user', {
   state: () => ({
     user: null,
     token: localStorage.getItem('token') || '',
-    isAuthenticated: false,
+    isAuthenticated: !!localStorage.getItem('token'), // 初始化时检查token
   }),
   
   getters: {
@@ -23,6 +23,7 @@ export const useUserStore = defineStore('user', {
           this.token = res.data.token;
           localStorage.setItem('token', res.data.token);
           await this.fetchUserInfo();
+          this.isAuthenticated = true; // 确保设置为 true
           return true;
         }
         return false;
@@ -35,7 +36,7 @@ export const useUserStore = defineStore('user', {
     async register(userData) {
       try {
         const res = await register(userData);
-        if (res.code === 0 && res.data) {
+        if (res.code === 200 && res.data) {
           return true;
         }
         return false;
@@ -50,7 +51,7 @@ export const useUserStore = defineStore('user', {
       
       try {
         const res = await validateToken();
-        if (res.code === 0 && res.data) {
+        if (res.code === 200 && res.data) {
           this.user = res.data;
           this.isAuthenticated = true;
           localStorage.setItem('userId', res.data.id);
@@ -69,9 +70,9 @@ export const useUserStore = defineStore('user', {
     async fetchUserInfo() {
       try {
         const res = await getUserInfo();
-        if (res.code === 0 && res.data) {
+        if (res.code === 200 && res.data) {
           this.user = res.data;
-          this.isAuthenticated = true;
+          this.isAuthenticated = true; // 明确设置为已认证
           localStorage.setItem('userId', res.data.id);
           return true;
         }
