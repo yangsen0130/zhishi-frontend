@@ -93,11 +93,9 @@ const isAuthenticated = computed(() => userStore.isAuthenticated);
 const username = computed(() => userStore.username);
 const user = computed(() => userStore.user);
 
-onMounted(async () => {
-  // 应用加载时检查用户认证状态
-  if (userStore.token) {
-    await userStore.validateToken();
-  }
+onMounted(() => {
+  // Authentication is now handled in main.js before app mount
+  console.log('App mounted, auth status:', userStore.isAuthenticated);
 });
 
 const handleLogout = () => {
