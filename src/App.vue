@@ -16,7 +16,7 @@
             </div>
             <div class="user-section">
               <div v-if="!isAuthenticated">
-                <el-button @click="$router.push('/')">登录 / 注册</el-button>
+                <el-button @click="showLoginDialog = true">登录 / 注册</el-button>
               </div>
               <div v-else class="user-info">
                 <span class="welcome-text">欢迎，{{ username }}</span>
@@ -54,18 +54,40 @@
           </div>
         </el-footer>
       </el-container>
+      
+      <!-- 登录/注册对话框 -->
+      <el-dialog v-model="showLoginDialog" :title="activeTab === 'login' ? '登录' : '注册'" width="500px">
+        <el-tabs v-model="activeTab">
+          <el-tab-pane label="登录" name="login">
+            <login-form 
+              @login-success="handleLoginSuccess"
+              @switch-to-register="activeTab = 'register'"
+            />
+          </el-tab-pane>
+          <el-tab-pane label="注册" name="register">
+            <register-form 
+              @register-success="handleRegisterSuccess"
+              @switch-to-login="activeTab = 'login'"
+            />
+          </el-tab-pane>
+        </el-tabs>
+      </el-dialog>
     </div>
   </el-config-provider>
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import { useUserStore } from '@/stores/user';
 import { ElMessage } from 'element-plus';
 import zhCn from 'element-plus/dist/locale/zh-cn.mjs';
+import LoginForm from '@/components/LoginForm.vue';
+import RegisterForm from '@/components/RegisterForm.vue';
 
 const userStore = useUserStore();
 const defaultAvatar = '/default-avatar.jpg';
+const showLoginDialog = ref(false);
+const activeTab = ref('login');
 
 const isAuthenticated = computed(() => userStore.isAuthenticated);
 const username = computed(() => userStore.username);
@@ -81,6 +103,16 @@ onMounted(async () => {
 const handleLogout = () => {
   userStore.logout();
   ElMessage.success('已退出登录');
+};
+
+const handleLoginSuccess = () => {
+  showLoginDialog.value = false;
+  ElMessage.success('登录成功');
+};
+
+const handleRegisterSuccess = () => {
+  ElMessage.success('注册成功，请登录');
+  activeTab.value = 'login';
 };
 </script>
 
