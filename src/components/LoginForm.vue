@@ -43,7 +43,7 @@ const rules = {
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码长度至少为6个字符', trigger: 'blur' },
+    { min: 3, message: '密码长度至少为6个字符', trigger: 'blur' },
   ],
 };
 

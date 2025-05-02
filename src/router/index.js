@@ -9,17 +9,17 @@ const routes = [
     name: 'Home',
     component: HomeView,
   },
-  {
-    path: '/planet/:id',
-    name: 'PlanetDetail',
-    component: () => import('@/views/PlanetDetailView.vue'),
-    meta: { requiresAuth: true },
-  },
+  // { // 删除了 PlanetDetail 路由
+  //   path: '/planet/:id',
+  //   name: 'PlanetDetail',
+  //   component: () => import('@/views/PlanetDetailView.vue'),
+  //   meta: { requiresAuth: true },
+  // },
   {
     path: '/article/:id',
     name: 'ArticleDetail',
     component: () => import('@/views/ArticleDetailView.vue'),
-    meta: { requiresAuth: true },
+    meta: { requiresAuth: true }, // 保持文章详情需要认证
   },
   {
     path: '/user-center',
@@ -36,24 +36,28 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   const userStore = useUserStore();
-  
+
+  // 验证逻辑保持不变
   if (to.meta.requiresAuth) {
     if (!userStore.isAuthenticated) {
-      // 如果有token，尝试验证
       if (userStore.token) {
         const valid = await userStore.validateToken();
         if (valid) {
           next();
         } else {
+          // 验证失败，重定向到首页或其他公共页面
           next({ name: 'Home' });
         }
       } else {
+        // 没有 token，重定向到首页或其他公共页面
         next({ name: 'Home' });
       }
     } else {
+      // 已认证
       next();
     }
   } else {
+    // 不需要认证的页面
     next();
   }
 });
