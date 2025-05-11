@@ -8,12 +8,15 @@
             <div class="logo" @click="$router.push('/')">
               <span class="logo-text">星球社区</span>
             </div>
+            <!-- nav-links section is removed as requested -->
+            <!-- 
             <div class="nav-links">
               <el-button text @click="$router.push('/')">首页</el-button>
               <el-button text @click="$router.push('/user-center')" v-if="isAuthenticated">
                 个人中心
               </el-button>
-            </div>
+            </div> 
+            -->
             <div class="user-section">
               <div v-if="!isAuthenticated">
                 <el-button @click="showLoginDialog = true">登录 / 注册</el-button>
@@ -85,7 +88,7 @@ import LoginForm from '@/components/LoginForm.vue';
 import RegisterForm from '@/components/RegisterForm.vue';
 
 const userStore = useUserStore();
-const defaultAvatar = '/default-avatar.jpg';
+const defaultAvatar = '/default-avatar.jpg'; // 确保这个默认头像存在于 public 目录下
 const showLoginDialog = ref(false);
 const activeTab = ref('login');
 
@@ -101,6 +104,8 @@ onMounted(() => {
 const handleLogout = () => {
   userStore.logout();
   ElMessage.success('已退出登录');
+  // 可能需要跳转到首页或其他公共页面
+  // router.push('/'); // 如果需要的话
 };
 
 const handleLoginSuccess = () => {
@@ -159,10 +164,7 @@ body {
   color: #409eff;
 }
 
-.nav-links {
-  display: flex;
-  gap: 20px;
-}
+/* Removed .nav-links styles as the element is removed */
 
 .user-section {
   display: flex;
@@ -177,10 +179,18 @@ body {
 
 .welcome-text {
   margin-right: 10px;
+  color: #606266; /* Added subtle color */
+}
+
+.el-dropdown-link {
+  cursor: pointer;
+  display: flex; /* Ensure avatar aligns well */
+  align-items: center;
 }
 
 .el-main {
   padding: 20px;
+  background-color: #f5f7fa; /* Match body background */
 }
 
 .el-footer {
@@ -203,5 +213,10 @@ body {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Ensure dialog content has some padding */
+.el-dialog__body {
+  padding: 20px 30px;
 }
 </style>

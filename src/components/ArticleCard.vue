@@ -50,7 +50,7 @@
   
   const viewDetail = () => {
     router.push({ name: 'ArticleDetail', params: { id: props.article.id } });
-  };
+  } ;
   </script>
   
   <style scoped>
