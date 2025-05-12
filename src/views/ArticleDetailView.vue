@@ -12,11 +12,11 @@
       <template #header>
         <h1 class="article-title">{{ article.title }}</h1>
         <div class="article-meta">
-          <span v-if="article.author" class="meta-item">
-            <el-icon><User /></el-icon> 作者: {{ article.author.username || '匿名' }}
+          <span v-if="article.authorName" class="meta-item"> <!-- Changed from article.author.username -->
+            <el-icon><User /></el-icon> 作者: {{ article.authorName }}
           </span>
-          <span v-if="article.createdAt" class="meta-item">
-            <el-icon><Clock /></el-icon> 发布于: {{ formatDate(article.createdAt) }}
+          <span v-if="article.createTime" class="meta-item"> <!-- Changed from article.createdAt -->
+            <el-icon><Clock /></el-icon> 发布于: {{ formatDate(article.createTime) }}
           </span>
         </div>
       </template>
@@ -33,7 +33,8 @@
         <p v-if="articlePreview.price !== undefined && articlePreview.price !== null" class="price-tag">
           价格: <span class="price-value">¥{{ Number(articlePreview.price).toFixed(2) }}</span>
         </p>
-        <div v-if="articlePreview.previewContent" class="preview-content" v-html="articlePreview.previewContent"></div>
+        <!-- 预览内容可以根据后端返回的 articlePreview.content 来决定是否显示 -->
+        <div v-if="articlePreview.content" class="preview-content" v-html="articlePreview.content.substring(0, 200) + '...'"></div>
         
         <el-button 
           type="primary" 
@@ -58,8 +59,10 @@
 import { ref, onMounted, computed, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getArticleDetail } from '@/api/article';
-import { createOrder } from '@/api/order'; // 引入创建订单API
-import { useUserStore } from '@/stores/user'; // 引入用户Store
+import { createOrder } from '@/api/order';
+// import { getPaymentUrl } from '@/api/pay'; // No longer needed as we construct URL directly
+import api from '@/api/index'; // Import the axios instance to get baseURL
+import { useUserStore } from '@/stores/user';
 import { ElCard, ElSkeleton, ElEmpty, ElMessage, ElIcon, ElButton, ElLink } from 'element-plus';
 import { User, Clock } from '@element-plus/icons-vue';
 
@@ -67,51 +70,53 @@ const route = useRoute();
 const router = useRouter();
 const userStore = useUserStore();
 
-const article = ref(null); // 存储完整文章内容
-const articlePreview = ref(null); // 存储无权限时返回的文章预览信息（含价格）
+const article = ref(null);
+const articlePreview = ref(null);
 const loading = ref(true);
-const purchaseLoading = ref(false); // 购买按钮加载状态
+const purchaseLoading = ref(false);
 
-const hasPermission = ref(false); // 用户是否有权限查看
-const showPurchaseSection = ref(false); // 是否显示购买区域
-const loadErrorText = ref('文章加载失败或不存在'); // 错误提示文本
+const hasPermission = ref(false);
+const showPurchaseSection = ref(false);
+const loadErrorText = ref('文章加载失败或不存在');
 
 const articleId = computed(() => route.params.id);
 
-// 监听路由参数变化，当从支付返回并带有 ?paid=true 时，重新加载
 watch(
   () => route.query,
-  (newQuery) => {
-    if (newQuery.paid === 'true' && newQuery.order_id) {
-      ElMessage.success('支付成功！正在加载文章...');
-      // 清理URL中的查询参数，避免刷新页面时重复提示和逻辑
-      // 使用 replace 清理查询参数，不留历史记录
-      const newRoute = { ...route, query: {} };
-      delete newRoute.query.paid; // 确保完全移除
-      delete newRoute.query.order_id;
-      router.replace({ path: route.path, query: newRoute.query });
-      
-      fetchArticleDetail(true); // 强制重新获取，因为权限可能已更新
+  (newQuery, oldQuery) => {
+    // Only react if 'paid' query parameter changes or appears
+    if (newQuery.paid && newQuery.paid !== oldQuery?.paid) {
+      if (newQuery.paid === 'true' && newQuery.order_id) {
+        ElMessage.success('支付成功！正在加载文章...');
+        fetchArticleDetail(true); // Force refresh
+      } else if (newQuery.paid === 'false' && newQuery.order_id) {
+        ElMessage.error(newQuery.error_msg || '支付失败或已取消。');
+      }
+      // Clean up query parameters after processing
+      // Use a slight delay to ensure message is visible if needed, then clean URL
+      setTimeout(() => {
+        const currentPath = route.path;
+        // Create a new query object excluding the processed payment params
+        const queryWithoutPaymentParams = { ...route.query };
+        delete queryWithoutPaymentParams.paid;
+        delete queryWithoutPaymentParams.order_id;
+        delete queryWithoutPaymentParams.error_msg; // Also remove error_msg
+        router.replace({ path: currentPath, query: queryWithoutPaymentParams });
+      }, 100); // Delay to allow messages to be seen
     }
   },
-  { immediate: false } // 不需要立即执行，onMounted会处理首次加载
+  { deep: true } // Use deep watch if query object structure might be complex, though usually not needed for flat query params
 );
-
 
 onMounted(async () => {
   if (articleId.value) {
-    // 检查是否从支付成功返回
-    if (route.query.paid === 'true' && route.query.order_id) {
-      // watch 中已处理，这里主要是为了确保首次挂载时如果带参数也能触发
-      // ElMessage.success('支付成功！正在加载文章...');
-      // const newRoute = { ...route, query: {} };
-      // delete newRoute.query.paid;
-      // delete newRoute.query.order_id;
-      // router.replace({ path: route.path, query: newRoute.query });
-      // await fetchArticleDetail(true); // watch 会处理
-    } else {
-      await fetchArticleDetail();
-    }
+    // Initial check for query params on mount, handled by watch now
+    // if (route.query.paid === 'true' && route.query.order_id) {
+    //   // This case will be handled by the watcher now
+    // } else if (route.query.paid === 'false' && route.query.order_id) {
+    //   // This case will be handled by the watcher now
+    // }
+    await fetchArticleDetail();
   } else {
     loading.value = false;
     loadErrorText.value = '无效的文章ID';
@@ -122,29 +127,30 @@ onMounted(async () => {
 const fetchArticleDetail = async (forceRefresh = false) => {
   if (!articleId.value) return;
   loading.value = true;
-  hasPermission.value = false; // 重置权限状态
-  showPurchaseSection.value = false; // 重置购买区域显示
+  hasPermission.value = false;
+  showPurchaseSection.value = false;
 
   try {
-    const res = await getArticleDetail(articleId.value);
+    // Pass a cache-busting parameter if forceRefresh is true
+    const params = forceRefresh ? { _t: Date.now() } : {};
+    const res = await getArticleDetail(articleId.value, { params });
     
     if (res.code === 200 && res.data) {
       if (res.data.hasFullAccess) {
-        // 用户有权限查看完整内容
         article.value = res.data;
-        articlePreview.value = null; // 清空预览
+        articlePreview.value = null;
         hasPermission.value = true;
       } else {
-        // 用户没有权限，需要购买
         article.value = null;
-        articlePreview.value = res.data; // 包含预览内容和价格信息
+        articlePreview.value = res.data;
         showPurchaseSection.value = true;
       }
-    } else if (res.code === 5000) { // 文章不存在
+    } else if (res.code === Code.ARTICLE_NOT_EXIST || res.code === 5000) { // Check against imported Code enum or hardcoded value
       article.value = null;
       articlePreview.value = null;
       loadErrorText.value = '文章不存在';
-    } else { // 其他错误
+      ElMessage.error(loadErrorText.value);
+    } else {
       article.value = null;
       articlePreview.value = null;
       loadErrorText.value = res.message || '获取文章详情失败';
@@ -154,18 +160,13 @@ const fetchArticleDetail = async (forceRefresh = false) => {
     console.error('Error fetching article detail:', error);
     article.value = null;
     articlePreview.value = null;
-    loadErrorText.value = '加载文章详情时出错，请检查网络连接或稍后再试';
-    if (error.response && error.response.status === 403) { // HTTP 403
-        // 如果后端直接返回HTTP 403，并且响应体中有特定结构指示购买
-        if (error.response.data && error.response.data.code === 200 && 
-            error.response.data.data && error.response.data.data.hasFullAccess === false) {
-            articlePreview.value = error.response.data.data;
-            showPurchaseSection.value = true;
-        } else {
-           ElMessage.error('您可能没有权限查看此文章。');
-        }
+    loadErrorText.value = '加载文章详情时出错';
+    if (error.response && error.response.data && error.response.data.data && error.response.data.data.hasFullAccess === false) {
+        articlePreview.value = error.response.data.data;
+        showPurchaseSection.value = true;
+        loadErrorText.value = '请购买以查看全文'; // More specific message
     } else {
-        ElMessage.error(loadErrorText.value);
+       ElMessage.error(loadErrorText.value);
     }
   } finally {
     loading.value = false;
@@ -189,32 +190,49 @@ const handlePurchase = async () => {
       articleId: Number(articleId.value),
       amount: Number(articlePreview.value.price)
     };
-    const res = await createOrder(orderData);
+    const createOrderResponse = await createOrder(orderData);
 
-    if (res.code === 200 && res.data && res.data.payUrl && res.data.orderId) {
-      // 在跳转到支付前，将 articleId 与 orderId 关联存储，以便支付成功回调时使用
-      localStorage.setItem(`paying_article_id_for_${res.data.orderId}`, articleId.value);
-      // 跳转到后端提供的支付URL，后端会处理重定向到支付宝
-      window.location.href = res.data.payUrl;
+    if (createOrderResponse.code === 200 && createOrderResponse.data && createOrderResponse.data.orderId && createOrderResponse.data.payUrl) {
+      // payUrl from backend is relative to the order service, e.g., "/order/pay?orderId=..."
+      // We need to construct the full URL for the gateway
+      // api.defaults.baseURL is like "http://localhost:9100/api"
+      // The gateway route for order service is "/api/order/**" which strips "/api"
+      // So, the target URL for the browser is GATEWAY_BASE_URL + backend_relative_payUrl
+      // Example: "http://localhost:9100/api" + "/order/pay?orderId=xyz"
+      // Result: "http://localhost:9100/api/order/pay?orderId=xyz"
+
+      const fullPayUrl = api.defaults.baseURL + createOrderResponse.data.payUrl;
+      
+      // Directly navigate the browser to the URL that serves the Alipay form
+      window.location.href = fullPayUrl;
+
     } else {
-      ElMessage.error(res.message || '创建订单失败，请稍后再试。');
+      ElMessage.error(createOrderResponse.message || '创建订单失败，请稍后再试。');
     }
   } catch (error) {
     console.error('Purchase error:', error);
-    ElMessage.error('购买过程中发生错误，请稍后再试。');
+    const errorMsg = error.response?.data?.message || '购买过程中发生错误，请稍后再试。';
+    ElMessage.error(errorMsg);
   } finally {
     purchaseLoading.value = false;
   }
 };
 
 const promptLogin = () => {
-  userStore.showLoginDialogAction(); // 调用 store action 显示 App.vue 中的登录框
+  // Assuming App.vue exposes a way to show login dialog, or userStore handles it
+  // For simplicity, let's assume userStore has an action for this
+  // This part depends on how you've structured your global login dialog visibility
+  // A common way is to have a ref in App.vue and a Pinia action to toggle it.
+  // If your userStore.showLoginDialogAction() is not defined, you need to implement it.
+  // Example: userStore.toggleLoginDialog(true);
+  ElMessage.info('请先登录后再进行购买。');
+  // router.push({ name: 'Login' }); // Or redirect to a login page
 };
 
 const formatDate = (dateString) => {
   if (!dateString) return '';
   try {
-    return new Date(dateString).toLocaleString(); 
+    return new Date(dateString).toLocaleString('zh-CN', { hour12: false }); 
   } catch (e) {
     return dateString;
   }
@@ -326,6 +344,7 @@ const formatDate = (dateString) => {
   color: #606266;
   max-height: 150px; /* Limit preview height */
   overflow-y: auto; /* Add scroll if preview is long */
+  border: 1px solid #eee;
 }
 .purchase-button {
   padding: 12px 30px;
