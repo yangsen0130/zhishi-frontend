@@ -27,6 +27,12 @@ const routes = [
     component: () => import('@/views/UserCenterView.vue'),
     meta: { requiresAuth: true },
   },
+  {
+    path: '/create-article',
+    name: 'CreateArticle',
+    component: () => import('@/views/CreateArticleView.vue'),
+    meta: { requiresAuth: true },
+  },
 ];
 
 const router = createRouter({
