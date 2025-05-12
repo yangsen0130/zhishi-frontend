@@ -13,6 +13,11 @@
           <el-input v-model="articleForm.title" placeholder="请输入文章标题" />
         </el-form-item>
         
+        <el-form-item label="价格" prop="price">
+          <el-input-number v-model="articleForm.price" :min="0" :precision="2" :step="0.01" placeholder="请设置文章价格" />
+          <span class="price-hint">设置为0表示文章免费</span>
+        </el-form-item>
+        
         <el-form-item label="内容" prop="content">
           <div class="editor-container">
             <MdEditor 
@@ -63,6 +68,7 @@ const toolbars = [
 const articleForm = reactive({
   title: '',
   content: '',
+  price: 0, // 默认价格为0，表示免费
 });
 
 // 处理图片上传
@@ -102,6 +108,7 @@ const handleSubmit = async () => {
     await createArticle({
       title: articleForm.title,
       content: articleForm.content,
+      price: articleForm.price, // 添加价格字段
     });
     
     ElMessage.success('发布成功');
@@ -139,6 +146,12 @@ const handleSubmit = async () => {
 
 .editor-container {
   margin-bottom: 20px;
+}
+
+.price-hint {
+  margin-left: 10px;
+  font-size: 0.9em;
+  color: #909399;
 }
 
 /* 适配不同屏幕尺寸 */
