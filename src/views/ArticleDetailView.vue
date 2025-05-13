@@ -36,14 +36,25 @@
         <!-- 预览内容可以根据后端返回的 articlePreview.content 来决定是否显示 -->
         <div v-if="articlePreview.content" class="preview-content" v-html="articlePreview.content.substring(0, 200) + '...'"></div>
         
-        <el-button 
-          type="primary" 
-          @click="handlePurchase" 
-          :loading="purchaseLoading"
-          class="purchase-button"
-        >
-          {{ userStore.isAuthenticated ? '立即购买' : '登录后购买' }}
-        </el-button>
+        <!-- Replace single button with payment options -->
+        <div class="payment-options">
+          <el-button 
+            type="primary" 
+            @click="handlePurchase" 
+            :loading="purchaseLoading"
+            class="purchase-button"
+          >
+            支付宝沙盒支付
+          </el-button>
+          <el-button 
+            type="success" 
+            @click="simulatePaymentSuccess" 
+            :loading="simulateLoading"
+            class="purchase-button"
+          >
+            模拟支付成功
+          </el-button>
+        </div>
         <p v-if="!userStore.isAuthenticated" class="login-prompt-text">
           您需要 <el-link type="primary" @click="promptLogin">登录</el-link> 才能购买。
         </p>
@@ -56,7 +67,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue';
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { getArticleDetail } from '@/api/article';
 import { createOrder } from '@/api/order';
@@ -74,6 +85,8 @@ const article = ref(null);
 const articlePreview = ref(null);
 const loading = ref(true);
 const purchaseLoading = ref(false);
+const simulateLoading = ref(false);
+const pollingInterval = ref(null);
 
 const hasPermission = ref(false);
 const showPurchaseSection = ref(false);
@@ -194,18 +207,10 @@ const handlePurchase = async () => {
 
     if (createOrderResponse.code === 200 && createOrderResponse.data && createOrderResponse.data.orderId && createOrderResponse.data.payUrl) {
       // payUrl from backend is relative to the order service, e.g., "/order/pay?orderId=..."
-      // We need to construct the full URL for the gateway
-      // api.defaults.baseURL is like "http://localhost:9100/api"
-      // The gateway route for order service is "/api/order/**" which strips "/api"
-      // So, the target URL for the browser is GATEWAY_BASE_URL + backend_relative_payUrl
-      // Example: "http://localhost:9100/api" + "/order/pay?orderId=xyz"
-      // Result: "http://localhost:9100/api/order/pay?orderId=xyz"
-
       const fullPayUrl = api.defaults.baseURL + createOrderResponse.data.payUrl;
       
       // Directly navigate the browser to the URL that serves the Alipay form
       window.location.href = fullPayUrl;
-
     } else {
       ElMessage.error(createOrderResponse.message || '创建订单失败，请稍后再试。');
     }
@@ -217,6 +222,99 @@ const handlePurchase = async () => {
     purchaseLoading.value = false;
   }
 };
+
+// New function to simulate payment success
+const simulatePaymentSuccess = async () => {
+  if (!userStore.isAuthenticated) {
+    promptLogin();
+    return;
+  }
+
+  if (!articlePreview.value || articlePreview.value.price === undefined || articlePreview.value.price === null) {
+    ElMessage.error('无法获取文章价格信息，请稍后再试。');
+    return;
+  }
+
+  simulateLoading.value = true;
+  try {
+    // 1. Create order first
+    const orderData = {
+      articleId: Number(articleId.value),
+      amount: Number(articlePreview.value.price)
+    };
+    const createOrderResponse = await createOrder(orderData);
+
+    if (createOrderResponse.code === 200 && createOrderResponse.data && createOrderResponse.data.orderId) {
+      const orderId = createOrderResponse.data.orderId;
+      
+      // 2. Call simulate payment success endpoint
+      const simulateResponse = await api.post(`/order/dev/simulate-payment-success/${orderId}`);
+      
+      if ( simulateResponse.code === 200) {
+        ElMessage.success('模拟支付成功！正在检查文章访问权限...');
+        // Start polling for article access
+        startPollingForAccess();
+      } else {
+        ElMessage.error(simulateResponse.data?.message || '模拟支付失败，请稍后重试。');
+      }
+    } else {
+      ElMessage.error(createOrderResponse.message || '创建订单失败，请稍后再试。');
+    }
+  } catch (error) {
+    console.error('Simulate payment error:', error);
+    const errorMsg = error.response?.data?.message || '模拟支付过程中发生错误，请稍后再试。';
+    ElMessage.error(errorMsg);
+  } finally {
+    simulateLoading.value = false;
+  }
+};
+
+// Function to poll for article access
+const startPollingForAccess = () => {
+  // Clear any existing polling
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value);
+  }
+  
+  // Poll every 2 seconds
+  pollingInterval.value = setInterval(async () => {
+    try {
+      const res = await getArticleDetail(articleId.value, { params: { _t: Date.now() } });
+      
+      if (res.code === 200 && res.data && res.data.hasFullAccess) {
+        // Access granted, stop polling and update UI
+        clearInterval(pollingInterval.value);
+        article.value = res.data;
+        articlePreview.value = null;
+        hasPermission.value = true;
+        showPurchaseSection.value = false;
+        ElMessage.success('文章访问权限已开通！');
+      }
+    } catch (error) {
+      console.error('Error checking article access:', error);
+      // On error, stop polling to avoid infinite errors
+      clearInterval(pollingInterval.value);
+      ElMessage.error('检查文章访问权限时出错，请刷新页面重试。');
+    }
+  }, 2000);
+  
+  // Set a timeout to stop polling after 30 seconds
+  setTimeout(() => {
+    if (pollingInterval.value) {
+      clearInterval(pollingInterval.value);
+      if (!hasPermission.value) {
+        ElMessage.warning('访问权限检查超时，请刷新页面查看最新状态。');
+      }
+    }
+  }, 30000);
+};
+
+// Clean up interval when component is unmounted
+onUnmounted(() => {
+  if (pollingInterval.value) {
+    clearInterval(pollingInterval.value);
+  }
+});
 
 const promptLogin = () => {
   // Assuming App.vue exposes a way to show login dialog, or userStore handles it
@@ -349,6 +447,12 @@ const formatDate = (dateString) => {
 .purchase-button {
   padding: 12px 30px;
   font-size: 1.1em;
+}
+.payment-options {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 15px;
 }
 .login-prompt-text {
   margin-top: 15px;
